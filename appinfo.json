@@ -1,0 +1,19 @@
+{
+    "appKeys": {},
+    "capabilities": [
+        ""
+    ],
+    "companyName": "colin.pinkney@gmail.com",
+    "longName": "Draw",
+    "projectType": "native",
+    "resources": {
+        "media": []
+    },
+    "shortName": "Draw",
+    "uuid": "0837029e-6bc3-4817-82c9-1362fd13e229",
+    "versionCode": 1,
+    "versionLabel": "1.0",
+    "watchapp": {
+        "watchface": false
+    }
+}
