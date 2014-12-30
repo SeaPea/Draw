@@ -3,7 +3,9 @@
 static Window *s_window;
 static Layer *s_canvaslayer;
 
-static bool s_cursor_on = true;
+static CanvaseClosedCallBack s_canvas_closed;
+
+static bool s_drawingcursor_on = true;
 static bool s_pen_down = false;
 static GPoint s_cursor_loc;
 static GPoint s_last_loc;
@@ -27,6 +29,7 @@ static void destroy_ui(void) {
 
 static void handle_window_unload(Window* window) {
   destroy_ui();
+  s_canvas_closed();
   if (s_image != NULL) {
     gbitmap_destroy(s_image);
     s_image = NULL;
@@ -66,8 +69,8 @@ static void updatecanvas(Layer *layer, GContext *ctx) {
     }
   }
   
-  // If cursor on or pen is not down, draw a cursor over the image
-  if (s_cursor_on || !s_pen_down) {
+  // If drawing cursor on or pen is not down, draw a cursor over the image
+  if (s_drawingcursor_on || !s_pen_down) {
     graphics_context_set_stroke_color(ctx, GColorBlack);
     graphics_context_set_compositing_mode(ctx, GCompOpAssignInverted);
     graphics_draw_line(ctx, GPoint(s_cursor_loc.x, s_cursor_loc.y - 5), GPoint(s_cursor_loc.x, s_cursor_loc.y + 5));
@@ -76,8 +79,8 @@ static void updatecanvas(Layer *layer, GContext *ctx) {
   
 }
 
-void toggle_cursor(void) {
-  s_cursor_on = !s_cursor_on;
+void set_drawingcursor(bool cursor_on) {
+  s_drawingcursor_on = cursor_on;
   layer_mark_dirty(s_canvaslayer);
 }
 
@@ -94,10 +97,27 @@ void set_paused(void) {
   s_pen_down = false;
 }
 
+void* get_imagedata(void) {
+  if (s_image == NULL) {
+    APP_LOG(APP_LOG_LEVEL_DEBUG, "Getting image data - NULL");
+    return NULL;
+  } else {
+    APP_LOG(APP_LOG_LEVEL_DEBUG, "Getting image data - NOT NULL");
+    return s_image->addr;
+  }
+}
+
+void init_imagedata(void) {
+  if (s_image == NULL)
+    s_image = gbitmap_create_blank(GSize(144, 168));
+}
+
 void cursor_set_loc(GPoint loc) {
-  s_last_loc = s_cursor_loc;
-  s_cursor_loc = loc;
-  layer_mark_dirty(s_canvaslayer);
+  if (loc.x != s_cursor_loc.x || loc.y != s_cursor_loc.y) {
+    s_last_loc = s_cursor_loc;
+    s_cursor_loc = loc;
+    layer_mark_dirty(s_canvaslayer);
+  }
 }
 
 void clear_image(void) {
@@ -113,7 +133,8 @@ void init_click_events(ClickConfigProvider click_config_provider) {
   window_set_click_config_provider(s_window, click_config_provider);
 }
 
-void show_canvas(void) {
+void show_canvas(CanvaseClosedCallBack closed_event) {
+  s_canvas_closed = closed_event;
   s_cursor_loc = GPoint(72, 84);
   s_last_loc = s_cursor_loc;
   initialise_ui();

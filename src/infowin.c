@@ -1,6 +1,8 @@
 #include "infowin.h"
 #include <pebble.h>
 
+static InfoWinClosedCallBack s_closed_event = NULL;
+  
 // BEGIN AUTO-GENERATED UI CODE; DO NOT MODIFY
 static Window *s_window;
 static TextLayer *s_textlayer_1;
@@ -18,15 +20,15 @@ static void initialise_ui(void) {
   window_set_fullscreen(s_window, true);
   
   // s_textlayer_1
-  s_textlayer_1 = text_layer_create(GRect(19, 12, 53, 44));
+  s_textlayer_1 = text_layer_create(GRect(19, 12, 50, 62));
   text_layer_set_background_color(s_textlayer_1, GColorClear);
-  text_layer_set_text(s_textlayer_1, "Dismiss this message");
+  text_layer_set_text(s_textlayer_1, "Exit app (Image auto-saves)");
   layer_add_child(window_get_root_layer(s_window), (Layer *)s_textlayer_1);
   
   // s_textlayer_2
-  s_textlayer_2 = text_layer_create(GRect(79, 12, 50, 33));
+  s_textlayer_2 = text_layer_create(GRect(65, 12, 64, 43));
   text_layer_set_background_color(s_textlayer_2, GColorClear);
-  text_layer_set_text(s_textlayer_2, "Re-zero tilt");
+  text_layer_set_text(s_textlayer_2, "Re-center pen");
   text_layer_set_text_alignment(s_textlayer_2, GTextAlignmentRight);
   layer_add_child(window_get_root_layer(s_window), (Layer *)s_textlayer_2);
   
@@ -65,16 +67,16 @@ static void initialise_ui(void) {
   layer_add_child(window_get_root_layer(s_window), (Layer *)s_textlayer_7);
   
   // s_textlayer_8
-  s_textlayer_8 = text_layer_create(GRect(40, 135, 90, 29));
+  s_textlayer_8 = text_layer_create(GRect(72, 139, 58, 17));
   text_layer_set_background_color(s_textlayer_8, GColorClear);
-  text_layer_set_text(s_textlayer_8, "Toggle cursor while drawing");
+  text_layer_set_text(s_textlayer_8, "Settings");
   text_layer_set_text_alignment(s_textlayer_8, GTextAlignmentRight);
   layer_add_child(window_get_root_layer(s_window), (Layer *)s_textlayer_8);
   
   // s_textlayer_9
-  s_textlayer_9 = text_layer_create(GRect(2, 98, 95, 30));
+  s_textlayer_9 = text_layer_create(GRect(2, 102, 136, 30));
   text_layer_set_background_color(s_textlayer_9, GColorClear);
-  text_layer_set_text(s_textlayer_9, "Shake while pen is off to clear");
+  text_layer_set_text(s_textlayer_9, "Shake Pebble while pen is off to clear drawing");
   layer_add_child(window_get_root_layer(s_window), (Layer *)s_textlayer_9);
 }
 
@@ -92,16 +94,31 @@ static void destroy_ui(void) {
 }
 // END AUTO-GENERATED UI CODE
 
-static void handle_window_unload(Window* window) {
-  destroy_ui();
+
+static void click_handler(ClickRecognizerRef recognizer, void *context) {
+  hide_infowin();
+}
+  
+// Trap single clicks
+static void click_config_provider(void *context) {
+  window_single_click_subscribe(BUTTON_ID_UP, click_handler);
+  window_single_click_subscribe(BUTTON_ID_SELECT, click_handler);
+  window_single_click_subscribe(BUTTON_ID_DOWN, click_handler);
 }
 
-void show_infowin(void) {
+static void handle_window_unload(Window* window) {
+  destroy_ui();
+  s_closed_event();
+}
+
+void show_infowin(InfoWinClosedCallBack closed_event) {
+  s_closed_event = closed_event;
   initialise_ui();
   window_set_window_handlers(s_window, (WindowHandlers) {
     .unload = handle_window_unload,
   });
   window_stack_push(s_window, true);
+  window_set_click_config_provider(s_window, click_config_provider);
 }
 
 void hide_infowin(void) {
