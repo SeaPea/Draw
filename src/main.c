@@ -17,6 +17,10 @@ enum SettingKeys {
   IMAGEDATA_START_KEY = 20
 };
 
+enum AppMsgKeys {
+  IMAGE_DATA_SEND_KEY = 1
+};
+
 static bool s_baselined = false;
 static int s_baseline_x;
 static int s_baseline_y;
@@ -25,6 +29,9 @@ static int s_filtered_x;
 static int s_filtered_y;
 static int s_max_tilt;
 static bool s_changed = false;
+
+static bool s_sending_image = false;
+static int s_chunk_pos;
 
 static struct Settings_st s_settings;
 
@@ -149,6 +156,53 @@ static void save_image() {
   }
 }
 
+static void send_image_chunk(void *data) {
+  void *bytes = get_imagedata() + s_chunk_pos;
+  
+  int len = 512;
+  
+  if (s_chunk_pos + len > 20*168)
+    len = (20*168) - s_chunk_pos;
+  
+  Tuplet data_chunk = TupletBytes(IMAGE_DATA_SEND_KEY, bytes, len);
+  
+  DictionaryIterator *iter;
+  app_message_outbox_begin(&iter);
+
+  if (iter == NULL) {
+    APP_LOG(APP_LOG_LEVEL_DEBUG, "Send image chunk iter is NULL");
+    s_sending_image = false;
+    return;
+  }
+
+  dict_write_tuplet(iter, &data_chunk);
+  dict_write_end(iter);
+  
+  APP_LOG(APP_LOG_LEVEL_DEBUG, "Sending image chunk - Pos: %d, Len: %d", s_chunk_pos, len);
+  
+  app_message_outbox_send();
+}
+
+static void send_image_chunk_failed(DictionaryIterator *iter, AppMessageResult reason, void *context) {
+  APP_LOG(APP_LOG_LEVEL_DEBUG, "Send image chunk failed: %d", reason);
+  s_sending_image = false;
+}
+
+static void sent_image_chunk(DictionaryIterator *iter, void *context) {
+  if (s_sending_image && s_chunk_pos + 512 < 20*168) {
+    s_chunk_pos += 512;
+    app_timer_register(15, send_image_chunk, NULL);
+  }
+  else
+    s_sending_image = false;
+}
+
+static void send_image(void) {
+  s_chunk_pos = 0;
+  s_sending_image = true;
+  send_image_chunk(NULL);
+}
+
 static void up_click_handler(ClickRecognizerRef recognizer, void *context) {
   set_paused();
   s_baselined = false;
@@ -161,7 +215,7 @@ static void select_click_handler(ClickRecognizerRef recognizer, void *context) {
 
 static void down_click_handler(ClickRecognizerRef recognizer, void *context) {
   set_paused();
-  show_settings(&s_settings, settings_closed);
+  show_settings(&s_settings, send_image, settings_closed);
 }
   
 // Trap single clicks
@@ -241,6 +295,10 @@ static void init(void) {
   accel_tap_service_subscribe(tap_handler);
   
   show_infowin(info_closed);
+  
+  app_message_register_outbox_sent(sent_image_chunk);
+  app_message_register_outbox_failed(send_image_chunk_failed);
+  app_message_open(64, app_message_outbox_size_maximum());
 }
 
 static void deinit(void) {

@@ -20,7 +20,7 @@ static void initialise_ui(void) {
   window_set_fullscreen(s_window, true);
   
   // s_textlayer_1
-  s_textlayer_1 = text_layer_create(GRect(19, 12, 50, 62));
+  s_textlayer_1 = text_layer_create(GRect(3, 24, 50, 62));
   text_layer_set_background_color(s_textlayer_1, GColorClear);
   text_layer_set_text(s_textlayer_1, "Exit app (Image auto-saves)");
   layer_add_child(window_get_root_layer(s_window), (Layer *)s_textlayer_1);
@@ -53,7 +53,7 @@ static void initialise_ui(void) {
   layer_add_child(window_get_root_layer(s_window), (Layer *)s_textlayer_5);
   
   // s_textlayer_6
-  s_textlayer_6 = text_layer_create(GRect(59, 65, 70, 36));
+  s_textlayer_6 = text_layer_create(GRect(58, 65, 70, 36));
   text_layer_set_background_color(s_textlayer_6, GColorClear);
   text_layer_set_text(s_textlayer_6, "Toggle pen on/off");
   text_layer_set_text_alignment(s_textlayer_6, GTextAlignmentRight);
@@ -67,14 +67,14 @@ static void initialise_ui(void) {
   layer_add_child(window_get_root_layer(s_window), (Layer *)s_textlayer_7);
   
   // s_textlayer_8
-  s_textlayer_8 = text_layer_create(GRect(72, 139, 58, 17));
+  s_textlayer_8 = text_layer_create(GRect(71, 139, 58, 17));
   text_layer_set_background_color(s_textlayer_8, GColorClear);
   text_layer_set_text(s_textlayer_8, "Settings");
   text_layer_set_text_alignment(s_textlayer_8, GTextAlignmentRight);
   layer_add_child(window_get_root_layer(s_window), (Layer *)s_textlayer_8);
   
   // s_textlayer_9
-  s_textlayer_9 = text_layer_create(GRect(2, 102, 136, 30));
+  s_textlayer_9 = text_layer_create(GRect(2, 102, 140, 30));
   text_layer_set_background_color(s_textlayer_9, GColorClear);
   text_layer_set_text(s_textlayer_9, "Shake Pebble while pen is off to clear drawing");
   layer_add_child(window_get_root_layer(s_window), (Layer *)s_textlayer_9);

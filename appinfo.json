@@ -1,7 +1,9 @@
 {
-    "appKeys": {},
+    "appKeys": {
+        "image_data": 1
+    },
     "capabilities": [
-        ""
+        "configurable"
     ],
     "companyName": "colin.pinkney@gmail.com",
     "longName": "Draw",

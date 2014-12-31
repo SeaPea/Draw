@@ -2,14 +2,18 @@
 #include "settings.h"
 
 
-#define NUM_MENU_SECTIONS 1
+#define NUM_MENU_SECTIONS 2
+#define NUM_MENU_SEND_ITEMS 1
 #define NUM_MENU_MISC_ITEMS 3
-#define MENU_MISC_SECTION 0
+#define MENU_SEND_SECTION 0
+#define MENU_SEND_ITEM 0
+#define MENU_MISC_SECTION 1
 #define MENU_DRAWINGCURSOR_ITEM 0
 #define MENU_BACKLIGHT_ITEM 1
 #define MENU_SENSITIVTY_ITEM 2
   
 static struct Settings_st *s_settings;
+static SendToPhoneCallBack s_send_event;
 static SettingsClosedCallBack s_settings_closed;
 
 static Window *s_window;
@@ -39,6 +43,8 @@ static uint16_t menu_get_num_sections_callback(MenuLayer *menu_layer, void *data
 // Set menu section item counts
 static uint16_t menu_get_num_rows_callback(MenuLayer *menu_layer, uint16_t section_index, void *data) {
   switch (section_index) {
+    case MENU_SEND_SECTION:
+      return NUM_MENU_SEND_ITEMS;
     case MENU_MISC_SECTION:
       return NUM_MENU_MISC_ITEMS;
     default:
@@ -49,8 +55,10 @@ static uint16_t menu_get_num_rows_callback(MenuLayer *menu_layer, uint16_t secti
 // Set default menu item height
 static int16_t menu_get_header_height_callback(MenuLayer *menu_layer, uint16_t section_index, void *data) {
   switch (section_index) {
-    case MENU_MISC_SECTION:
+    case MENU_SEND_SECTION:
       return 0;
+    case MENU_MISC_SECTION:
+      return MENU_CELL_BASIC_HEADER_HEIGHT;
     default:
       return MENU_CELL_BASIC_HEADER_HEIGHT;
   }
@@ -59,8 +67,11 @@ static int16_t menu_get_header_height_callback(MenuLayer *menu_layer, uint16_t s
 // Draw menu section headers
 static void menu_draw_header_callback(GContext* ctx, const Layer *cell_layer, uint16_t section_index, void *data) {
   switch (section_index) {
-    case MENU_MISC_SECTION:
+    case MENU_SEND_SECTION:
       menu_cell_basic_header_draw(ctx, cell_layer, NULL);
+      break;
+    case MENU_MISC_SECTION:
+      menu_cell_basic_header_draw(ctx, cell_layer, "Misc Settings");
       break;
   }
 }
@@ -69,6 +80,14 @@ static void menu_draw_header_callback(GContext* ctx, const Layer *cell_layer, ui
 static void menu_draw_row_callback(GContext* ctx, const Layer *cell_layer, MenuIndex *cell_index, void *data) {
   
   switch (cell_index->section) {
+    case MENU_SEND_SECTION:
+      switch (cell_index->row) {
+        case MENU_SEND_ITEM:
+          menu_cell_basic_draw(ctx, cell_layer, "Send to Phone", NULL, NULL);
+          break;
+      }
+      break;
+    
     case MENU_MISC_SECTION:
       switch (cell_index->row) {
         case MENU_DRAWINGCURSOR_ITEM:
@@ -104,6 +123,13 @@ static void menu_draw_row_callback(GContext* ctx, const Layer *cell_layer, MenuI
 // Process menu item select clicks
 static void menu_select_callback(MenuLayer *menu_layer, MenuIndex *cell_index, void *data) {
   switch (cell_index->section) {
+    case MENU_SEND_SECTION:
+      switch (cell_index->row) {
+        case MENU_SEND_ITEM:
+          s_send_event();
+          break;
+      }
+    
     case MENU_MISC_SECTION:
       switch (cell_index->row) {
         case MENU_DRAWINGCURSOR_ITEM:
@@ -132,13 +158,14 @@ static void handle_window_unload(Window* window) {
   destroy_ui();
 }
 
-void show_settings(struct Settings_st *settings, SettingsClosedCallBack settings_closed) {
+void show_settings(struct Settings_st *settings, SendToPhoneCallBack send_event, SettingsClosedCallBack settings_closed) {
   initialise_ui();
   window_set_window_handlers(s_window, (WindowHandlers) {
     .unload = handle_window_unload,
   });
   
   s_settings = settings;
+  s_send_event = send_event;
   s_settings_closed = settings_closed;
   
   // Set all the callbacks for the menu layer

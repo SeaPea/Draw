@@ -2,6 +2,7 @@
 #include <pebble.h>
   
 typedef void (*SettingsClosedCallBack)();
+typedef void (*SendToPhoneCallBack)();
 
 typedef enum CursorSensitivity {
   CS_LOW = 1,
@@ -15,5 +16,5 @@ struct Settings_st {
   CursorSensitivity sensitivity;
 };
 
-void show_settings(struct Settings_st *settings, SettingsClosedCallBack settings_closed);
+void show_settings(struct Settings_st *settings, SendToPhoneCallBack send_event, SettingsClosedCallBack settings_closed);
 void hide_settings(void);
