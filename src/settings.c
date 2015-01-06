@@ -96,7 +96,7 @@ static void menu_draw_row_callback(GContext* ctx, const Layer *cell_layer, MenuI
           break;
         case MENU_BACKLIGHT_ITEM:
           // Backlight always on or not
-          menu_cell_basic_draw(ctx, cell_layer, "Backlight", s_settings->backlight_alwayson ? "ALWAYS ON" : "Default setting", NULL);
+          menu_cell_basic_draw(ctx, cell_layer, "Backlight", s_settings->backlight_alwayson ? "ON while drawing" : "Default setting", NULL);
           break;
         case MENU_SENSITIVTY_ITEM:
           // Adjust Smart Alarm movement sensitivity
@@ -139,11 +139,6 @@ static void menu_select_callback(MenuLayer *menu_layer, MenuIndex *cell_index, v
         case MENU_BACKLIGHT_ITEM:
           s_settings->backlight_alwayson = !s_settings->backlight_alwayson;
           layer_mark_dirty(menu_layer_get_layer(settings_layer));
-          if (s_settings->backlight_alwayson)
-            light_enable(true);
-          else
-            light_enable(false);
-          break;
         case MENU_SENSITIVTY_ITEM:
           s_settings->sensitivity = (s_settings->sensitivity == CS_HIGH ? CS_LOW : s_settings->sensitivity + 1);
           layer_mark_dirty(menu_layer_get_layer(settings_layer));

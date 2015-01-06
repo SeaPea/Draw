@@ -1,6 +1,7 @@
 #include <pebble.h>
 
 typedef void (*CanvaseClosedCallBack)();
+typedef void (*PenStatusCallBack)(bool pen_down);
   
 void set_drawingcursor(bool cursor_on);
 void toggle_pen(void);
@@ -13,5 +14,5 @@ void* get_imagedata(void);
 void init_imagedata(void);
 
 void init_click_events(ClickConfigProvider click_config_provider);
-void show_canvas(CanvaseClosedCallBack closed_event);
+void show_canvas(PenStatusCallBack pen_event, CanvaseClosedCallBack closed_event);
 void hide_canvas(void);

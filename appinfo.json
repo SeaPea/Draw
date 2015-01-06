@@ -1,5 +1,6 @@
 {
     "appKeys": {
+        "chunk_status": 2,
         "image_data": 1
     },
     "capabilities": [

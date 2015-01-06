@@ -3,6 +3,7 @@
 static Window *s_window;
 static Layer *s_canvaslayer;
 
+static PenStatusCallBack s_pen_event;
 static CanvaseClosedCallBack s_canvas_closed;
 
 static bool s_drawingcursor_on = true;
@@ -28,8 +29,9 @@ static void destroy_ui(void) {
 }
 
 static void handle_window_unload(Window* window) {
+  set_paused();
   destroy_ui();
-  s_canvas_closed();
+  if (s_canvas_closed != NULL) s_canvas_closed();
   if (s_image != NULL) {
     gbitmap_destroy(s_image);
     s_image = NULL;
@@ -87,6 +89,7 @@ void set_drawingcursor(bool cursor_on) {
 void toggle_pen(void) {
   s_pen_down = !s_pen_down;
   layer_mark_dirty(s_canvaslayer);
+  if (s_pen_event != NULL) s_pen_event(s_pen_down);
 }
 
 bool is_pen_down(void) {
@@ -95,6 +98,7 @@ bool is_pen_down(void) {
 
 void set_paused(void) {
   s_pen_down = false;
+  if (s_pen_event != NULL) s_pen_event(s_pen_down);
 }
 
 void* get_imagedata(void) {
@@ -133,7 +137,8 @@ void init_click_events(ClickConfigProvider click_config_provider) {
   window_set_click_config_provider(s_window, click_config_provider);
 }
 
-void show_canvas(CanvaseClosedCallBack closed_event) {
+void show_canvas(PenStatusCallBack pen_event, CanvaseClosedCallBack closed_event) {
+  s_pen_event = pen_event;
   s_canvas_closed = closed_event;
   s_cursor_loc = GPoint(72, 84);
   s_last_loc = s_cursor_loc;
