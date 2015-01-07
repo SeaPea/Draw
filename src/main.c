@@ -62,10 +62,7 @@ static uint32_t intsqrt(uint32_t input)
     uint32_t one = 1uL << 30; 
 
     // Find the highest power of four <= than the input.
-    while (one > op)
-    {
-        one >>= 2;
-    }
+    while (one > op) one >>= 2;
 
     while (one != 0)
     {
@@ -79,10 +76,7 @@ static uint32_t intsqrt(uint32_t input)
     }
 
     // Round result
-    if (op > result)
-    {
-        result++;
-    }
+    if (op > result) result++;
 
     return result;
 }
@@ -129,8 +123,8 @@ static void accel_handler(AccelData *data, uint32_t num_samples) {
       
       // Convert filtered accel values to angles in the x and y plane
       uint16_t adj = intsqrt(s_filtered_y * s_filtered_y + s_filtered_z * s_filtered_z);
-      uint16_t angle_x = atan2_lookup(s_filtered_x, adj);
-      adj = intsqrt(s_filtered_x * s_filtered_x + s_filtered_z * s_filtered_z);
+      uint16_t angle_x = atan2_lookup(s_filtered_x * ((s_filtered_z > 0) ? -1 : 1), adj);
+      adj = intsqrt(s_filtered_x * s_filtered_x + s_filtered_z * s_filtered_z) * ((s_filtered_z > 0) ? -1 : 1);
       uint16_t angle_y = atan2_lookup(s_filtered_y, adj);
       
       GPoint loc;
@@ -169,8 +163,8 @@ static void accel_handler(AccelData *data, uint32_t num_samples) {
       
       // Convert accel values to angles in the x and y plane
       uint16_t adj = intsqrt(avg_y * avg_y + avg_z * avg_z);
-      uint16_t angle_x = atan2_lookup(avg_x, adj);
-      adj = intsqrt(avg_x * avg_x + avg_z * avg_z);
+      uint16_t angle_x = atan2_lookup(avg_x * ((avg_z > 0) ? -1 : 1), adj);
+      adj = intsqrt(avg_x * avg_x + avg_z * avg_z) * ((avg_z > 0) ? -1 : 1);
       uint16_t angle_y = atan2_lookup(avg_y, adj);
       
       s_baseline_x = angle_x;
@@ -180,7 +174,8 @@ static void accel_handler(AccelData *data, uint32_t num_samples) {
       s_filtered_z = avg_z;
       s_baselined = true;
       
-      APP_LOG(APP_LOG_LEVEL_DEBUG, "Baselines - x: %d, y: %d", angle_x, angle_y);
+      APP_LOG(APP_LOG_LEVEL_DEBUG, "Baselines - x: %d g, x: %d deg, y: %d g, y: %d deg, z %d g", 
+              avg_x, (int)divide(360 * angle_x, UINT16_MAX), avg_y, (int)divide(360 * angle_y, UINT16_MAX), avg_z);
     }
   }
   
@@ -189,7 +184,7 @@ static void accel_handler(AccelData *data, uint32_t num_samples) {
 static void load_settings(void) {
   set_drawingcursor(s_settings.drawingcursor_on);
   
-  if (s_settings.backlight_alwayson)
+  if (s_settings.backlight_alwayson && is_pen_down())
     light_enable(true);
   else
     light_enable(false);

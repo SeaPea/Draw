@@ -9,19 +9,30 @@ function to4Byte(value) {
   return String.fromCharCode(value&0xff, (value>>8)&0xff, (value>>16)&0xff, (value>>24)&0xff);
 }
 
+function swapByteEndianness(val) { 
+  return ((val & 0x1) << 7) | 
+          ((val & 0x2) << 5) | 
+          ((val & 0x4) << 3) | 
+          ((val & 0x8) << 1) | 
+          ((val >> 1) & 0x8) | 
+          ((val >> 3) & 0x4) | 
+          ((val >> 5) & 0x2) | 
+          ((val >> 7) & 0x1); 
+}
+
 function CreateBMP(pixel_data, width, height) {
   var bmp;
  
   // BMP Header
   bmp = 'BM';                            // ID
-  bmp += to4Byte(54 + pixel_data.length); // File size
+  bmp += to4Byte(62 + pixel_data.length); // File size
   bmp += to4Byte(0);                      // Unused
-  bmp += to4Byte(54);                     // Pixel offset
+  bmp += to4Byte(62);                     // Pixel offset
   
   // DIB Header
   bmp += to4Byte(40);                 // DIB header length
-  bmp += to4Byte(height);
   bmp += to4Byte(width);
+  bmp += to4Byte(height);
   bmp += String.fromCharCode(1, 0);   // colour panes
   bmp += String.fromCharCode(1, 0);   // 1 bit per pixel
   bmp += to4Byte(0);                  // No compression
@@ -31,8 +42,27 @@ function CreateBMP(pixel_data, width, height) {
   bmp += to4Byte(0);                  // Color palette - don't care
   bmp += to4Byte(0);                  // All colors important
   
+  // 1-bit B&W Palette
+  bmp += to4Byte(0);
+  bmp += to4Byte(255 + (255*256) + (255*65536));
+  
+  // Reverse vertical order of pixel rows
+  var row_size = width / 8;
+  while (row_size % 4 !== 0) row_size++;  // Row size is always buffered to be a multiple of 4 (bytes)
+  
+  var pixels = [];
+  
+  for (var y = height-1; y >= 0; y--) {
+    for (var x = y * row_size; x < (y+1) * row_size; x++) {
+      pixels.push(swapByteEndianness(pixel_data[x]));
+    }
+  }
+  //for (var i = pixel_data.length - 1; i >= 0; i--) {
+  //  pixels = pixels.concat(pixel_data[i]);
+  //}
+  
   // Pixel data
-  bmp += String.fromCharCode.apply(String, pixel_data);
+  bmp += String.fromCharCode.apply(String, pixels);
   
   return bmp;
 }
