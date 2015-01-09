@@ -46,7 +46,7 @@ function CreateBMP(pixel_data, width, height) {
   bmp += to4Byte(0);
   bmp += to4Byte(255 + (255*256) + (255*65536));
   
-  // Reverse vertical order of pixel rows
+  // Reverse vertical order of pixel rows and swap byte endianness
   var row_size = width / 8;
   while (row_size % 4 !== 0) row_size++;  // Row size is always buffered to be a multiple of 4 (bytes)
   
@@ -57,9 +57,6 @@ function CreateBMP(pixel_data, width, height) {
       pixels.push(swapByteEndianness(pixel_data[x]));
     }
   }
-  //for (var i = pixel_data.length - 1; i >= 0; i--) {
-  //  pixels = pixels.concat(pixel_data[i]);
-  //}
   
   // Pixel data
   bmp += String.fromCharCode.apply(String, pixels);
@@ -71,10 +68,10 @@ Pebble.addEventListener('ready',
   function(e) {
     console.log('JavaScript app ready and running!');
     if (localStorage.imageData !== undefined) {
-      image_data = localStorage.imageData;
+      image_data = JSON.parse(localStorage.imageData);
     }
     if (localStorage.chunkStatus !== undefined) {
-      chunk_status = localStorage.chunkStatus;
+      chunk_status = parseInt(localStorage.chunkStatus);
     }
   }
 );
@@ -137,7 +134,7 @@ Pebble.addEventListener("appmessage",
                                 break;
                               case ChunkStatusEnum.LAST_CHUNK:
                                 image_data = image_data.concat(e.payload.image_data);
-                                localStorage.imageData = image_data;
+                                localStorage.imageData = JSON.stringify(image_data);
                                 localStorage.chunkStatus = chunk_status;
                                 break;
                               default:
@@ -158,8 +155,9 @@ Pebble.addEventListener("showConfiguration",
                              console.log("Base64 BMP: " + Base64.encode(bmp));
                            }
                            Pebble.openURL("data:text/html," + 
-                                          encodeURIComponent('<html><head><meta name="viewport" content="width=device-width, initial-scale=1" /></head><body><h1>Your Drawing</h1><p>Hold down on the image to save or copy</p><p><img src="data:image/bmp;base64,' +
-                                                             Base64.encode(bmp) + '" style="width:90%;" /></p><p><input type="button" value="Close" onClick="location.href=&quot;pebblejs://close#&quot;" /></p></body></html><!--.html'));
+                                          encodeURIComponent('<html><head><meta name="viewport" content="width=device-width, initial-scale=1" /><script language="JavaScript">function CopyImg(e) {alert("Click OK and try pasting into something like an email.");}</script></head><body style="font-family: sans-serif;"><h1 style="text-align: center;">My Pebble Art</h1><p>EXPERIMENTAL: Hold down on the image to save or copy</p><p align="center" onCopy="CopyImg(event);"><img id="drawing" src="data:image/bmp;base64,' +
+                                                             Base64.encode(bmp) + '" width=144 height=168 style="width:50%; border: 2px black solid;" /></p><p>Alternatively select and copy the image as Base64 below and use a 3rd party tool to convert back to a BMP image.<br /><textarea id="txtBase64" style="width: 100%;" rows=4>' + 
+                                                             Base64.encode(bmp) + '</textarea><p style="text-align: center;"><input type="button" value="Close" style="font-size: larger;" onClick="location.href=&quot;pebblejs://close#&quot;" /></p></body></html><!--.html'));
                           });
 
 
