@@ -9,6 +9,7 @@ bool is_pen_down(void);
 void set_paused(void);
 void cursor_set_loc(GPoint loc);
 void clear_image(void);
+bool is_canvas_on_top();
 
 void* get_imagedata(void);
 void init_imagedata(void);

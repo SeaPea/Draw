@@ -133,6 +133,13 @@ void clear_image(void) {
   layer_mark_dirty(s_canvaslayer);
 }
 
+bool is_canvas_on_top() {
+  if (s_window == NULL)
+    return false;
+  else 
+    return (s_window == window_stack_get_top_window());
+}
+
 void init_click_events(ClickConfigProvider click_config_provider) {
   window_set_click_config_provider(s_window, click_config_provider);
 }
