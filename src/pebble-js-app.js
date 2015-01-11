@@ -1,4 +1,4 @@
-var DEBUG = true;
+var DEBUG = false;
 
 var ChunkStatusEnum = {FIRST_CHUNK: 1, MID_CHUNK: 2, LAST_CHUNK: 3};
 

@@ -1,5 +1,8 @@
 #include "canvas.h"
+#include "common.h"
 
+// Canvas is main window of the application that draws the image
+  
 static Window *s_window;
 static Layer *s_canvaslayer;
 
@@ -38,34 +41,38 @@ static void handle_window_unload(Window* window) {
   }
 }
 
+// Handle canvas layer being redrawn (which also does the image drawing)
 static void updatecanvas(Layer *layer, GContext *ctx) {
   
   // If there is an image in memory, copy it back to the screen (since it clears every time this proc is called)
   if (s_image != NULL) {
+    // Access framebuffer directly to get pixel data
     GBitmap *screen = graphics_capture_frame_buffer(ctx);
       
     if (screen != NULL) {
       // Pebble screen (144x168) uses 20 bytes per row, so copy 20x168 bytes of the bitmap data
       // from the drawn image back to the framebuffer
-      memcpy(screen->addr, s_image->addr, 20*168);
-      graphics_release_frame_buffer(ctx, screen);
+      memcpy(screen->addr, s_image->addr, IMG_PIXELS);
+      graphics_release_frame_buffer(ctx, screen); // Must release for line draw to work
     }
   }
   
   if (s_pen_down) {
     // Draw a line between the last cursor position and the new position (in case the cursor jumps)
+    // (Could write my own line draw directly to the framebuffer, but why reinvent the wheel?)
     graphics_draw_line(ctx, s_last_loc, s_cursor_loc);
     
-    // Capture framebuffer to save image
-    if (s_image == NULL) s_image = gbitmap_create_blank(GSize(144, 168));
+    // Create bitmap to store framebuffer pixel data after drawing line (lazy way to draw)
+    if (s_image == NULL) s_image = gbitmap_create_blank(GSize(IMG_WIDTH, IMG_HEIGHT));
     
     if (s_image != NULL) {
+      // Access framebuffer directly to copy the updated pixels back to the bitmap
       GBitmap *screen = graphics_capture_frame_buffer(ctx);
       
       if (screen != NULL) {
         // Pebble screen (144x168) uses 20 bytes per row, so copy 20x168 bytes of the bitmap data
         // from the framebuffer to save the drawn image
-        memcpy(s_image->addr, screen->addr, 20*168);
+        memcpy(s_image->addr, screen->addr, IMG_PIXELS);
         graphics_release_frame_buffer(ctx, screen);
       }
     }
@@ -81,26 +88,31 @@ static void updatecanvas(Layer *layer, GContext *ctx) {
   
 }
 
+// Turns cursor while drawing on/off
 void set_drawingcursor(bool cursor_on) {
   s_drawingcursor_on = cursor_on;
   layer_mark_dirty(s_canvaslayer);
 }
 
+// Toggles 'pen' (drawing) on/off (down/up)
 void toggle_pen(void) {
   s_pen_down = !s_pen_down;
   layer_mark_dirty(s_canvaslayer);
   if (s_pen_event != NULL) s_pen_event(s_pen_down);
 }
 
+// Indicates if 'pen' is down (drawing is on)
 bool is_pen_down(void) {
   return s_pen_down;
 }
 
+// Pauses drawing by setting 'pen' up
 void set_paused(void) {
   s_pen_down = false;
   if (s_pen_event != NULL) s_pen_event(s_pen_down);
 }
 
+// Gets reference to the image pixel data
 void* get_imagedata(void) {
   if (s_image == NULL) {
     APP_LOG(APP_LOG_LEVEL_DEBUG, "Getting image data - NULL");
@@ -111,19 +123,23 @@ void* get_imagedata(void) {
   }
 }
 
+// Initializes bitmap that stores the image data
 void init_imagedata(void) {
   if (s_image == NULL)
-    s_image = gbitmap_create_blank(GSize(144, 168));
+    s_image = gbitmap_create_blank(GSize(IMG_WIDTH, IMG_HEIGHT));
 }
 
+// Updates the cursor location (if 'pen' is down this will draw on the screen)
 void cursor_set_loc(GPoint loc) {
   if (loc.x != s_cursor_loc.x || loc.y != s_cursor_loc.y) {
+    // If the cursor location has changed, update the screen
     s_last_loc = s_cursor_loc;
     s_cursor_loc = loc;
     layer_mark_dirty(s_canvaslayer);
   }
 }
 
+// Clears the image data and updates the screen
 void clear_image(void) {
   if (s_image != NULL) {
     gbitmap_destroy(s_image);
@@ -133,6 +149,7 @@ void clear_image(void) {
   layer_mark_dirty(s_canvaslayer);
 }
 
+// Indicates if the canvas window is on top of the stack (is displaying)
 bool is_canvas_on_top() {
   if (s_window == NULL)
     return false;
@@ -140,14 +157,16 @@ bool is_canvas_on_top() {
     return (s_window == window_stack_get_top_window());
 }
 
+// Trap button clicks for this window
 void init_click_events(ClickConfigProvider click_config_provider) {
   window_set_click_config_provider(s_window, click_config_provider);
 }
 
+// Initialize and show the main window with event callbacks
 void show_canvas(PenStatusCallBack pen_event, CanvaseClosedCallBack closed_event) {
   s_pen_event = pen_event;
   s_canvas_closed = closed_event;
-  s_cursor_loc = GPoint(72, 84);
+  s_cursor_loc = GPoint((IMG_WIDTH/2), (IMG_HEIGHT/2));
   s_last_loc = s_cursor_loc;
   initialise_ui();
   window_set_window_handlers(s_window, (WindowHandlers) {

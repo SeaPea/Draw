@@ -1,6 +1,8 @@
 #include "infowin.h"
 #include <pebble.h>
 
+// Simple window with info on what each button does on the main window and how to clear the image
+  
 static InfoWinClosedCallBack s_closed_event = NULL;
   
 // BEGIN AUTO-GENERATED UI CODE; DO NOT MODIFY
@@ -99,7 +101,7 @@ static void click_handler(ClickRecognizerRef recognizer, void *context) {
   hide_infowin();
 }
   
-// Trap single clicks
+// Trap single clicks so that any button click dismisses this window
 static void click_config_provider(void *context) {
   window_single_click_subscribe(BUTTON_ID_UP, click_handler);
   window_single_click_subscribe(BUTTON_ID_SELECT, click_handler);

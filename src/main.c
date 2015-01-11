@@ -1,14 +1,12 @@
 #include <pebble.h>
+#include "common.h"
 #include "canvas.h"  
+#include "intmath.h"
 #include "infowin.h"
 #include "settings.h"
 #include "msg.h"
 
-//#define DEBUG
-#ifndef DEBUG
-#undef APP_LOG
-#define APP_LOG(...)
-#endif
+// Main app unit - controls application and processes acceleromoter events
   
 #define HIGH_TILT UINT16_MAX / 14   // Approx. 25deg
 #define MEDIUM_TILT UINT16_MAX / 10 // Approx. 35deg
@@ -17,6 +15,7 @@
 #define FILTER_K 0.9  // Accelerometer smoothing constant (Must be less than 1. Higher = smoother, slower. Lower = faster, less smooth)
 
 #define IMAGE_CHUNK_SIZE 512
+#define PERSIST_SIZE_MAX 256
   
 // App settings index keys
 enum SettingKeys {
@@ -50,7 +49,8 @@ static int s_filtered_y;
 static int s_filtered_z;
 
 static int s_max_tilt;
-static bool s_changed = false;
+static bool s_changed = false; // Indicates if the image has changed
+static bool s_infocus = true;  // Indicates if the app is in focus
 
 static bool s_sending_image = false;
 static int s_chunk_pos;
@@ -61,134 +61,101 @@ static char s_msg[100];
 // (Not used for saving settings as it is easier to store them individually when settings may be added)
 static struct Settings_st s_settings;
 
-// Integer division with rounding
-static int32_t divide(int32_t n, int32_t d)
-{
-  return ((n < 0) ^ (d < 0)) ? ((n - d/2) / d) : ((n + d/2) / d);
-}
-
-// Fast integer square-root with rounding
-static uint32_t intsqrt(uint32_t input)
-{
-    if (input == 0) return 0;
-  
-    uint32_t op  = input;
-    uint32_t result = 0;
-    uint32_t one = 1uL << 30; 
-
-    // Find the highest power of four <= than the input.
-    while (one > op) one >>= 2;
-  
-    // Find the root
-    while (one != 0)
-    {
-        if (op >= result + one)
-        {
-            op = op - (result + one);
-            result = result +  2 * one;
-        }
-        result >>= 1;
-        one >>= 2;
-    }
-
-    // Round result
-    if (op > result) result++;
-
-    return result;
-}
-
 // Accelerometer handler, where cursor movement is processed
 static void accel_handler(AccelData *data, uint32_t num_samples) {
   
-  bool has_valid_sample = true;
-  int total_x = 0;
-  int total_y = 0;
-  int total_z = 0;
-  int avg_x = 0;
-  int avg_y = 0;
-  int avg_z = 0;
-  
-  // Calculate totals in order to average accel in each axis for the sample size
-  for (int i = 0; i < (int)num_samples; i++) {
-    if (data[i].did_vibrate) {
-      has_valid_sample = false;
-      break;
+  if (s_infocus) {
+    // Only process accelerometer values when app is in focus
+    
+    bool has_valid_sample = true;
+    int total_x = 0;
+    int total_y = 0;
+    int total_z = 0;
+    int avg_x = 0;
+    int avg_y = 0;
+    int avg_z = 0;
+    
+    // Calculate totals in order to average accel in each axis for the sample size
+    for (int i = 0; i < (int)num_samples; i++) {
+      if (data[i].did_vibrate) {
+        has_valid_sample = false;
+        break;
+      }
+      total_x += data[i].x;
+      total_y += -data[i].y;
+      total_z += data[i].z;
     }
-    total_x += data[i].x;
-    total_y += -data[i].y;
-    total_z += data[i].z;
-  }
+    
+    if (has_valid_sample) {
+      // If there was no vibration, calculate average accel values for sample size
+      avg_x = divide(total_x, num_samples);
+      avg_y = divide(total_y, num_samples);
+      avg_z = divide(total_z, num_samples);
+        
+      if (s_centered) {
+        // If cursor center has been fixed, move cursor as necessary
+        
+        // Average values for sample size are still a little
+        // erratic, so use a single pole, IIR filter to smooth them out
+        s_filtered_x = (s_filtered_x * FILTER_K) + ((1.0 - FILTER_K) * avg_x);
+        s_filtered_y = (s_filtered_y * FILTER_K) + ((1.0 - FILTER_K) * avg_y);
+        s_filtered_z = (s_filtered_z * FILTER_K) + ((1.0 - FILTER_K) * avg_z);
+        
+        // Convert filtered accel values to angles in the x and y plane
+        // (Angle values are 0 to 2^16 representing 0 to 360 degrees linearly)
+        uint16_t adj = intsqrt(s_filtered_y * s_filtered_y + s_filtered_z * s_filtered_z);
+        uint16_t angle_x = atan2_lookup(s_filtered_x * ((s_filtered_z > 0) ? -1 : 1), adj);
+        adj = intsqrt(s_filtered_x * s_filtered_x + s_filtered_z * s_filtered_z) * ((s_filtered_z > 0) ? -1 : 1);
+        uint16_t angle_y = atan2_lookup(s_filtered_y, adj);
+        
+        GPoint loc;
+        
+        // Calculate the difference from the center values to represent cursor movement.
+        // Use overflow of uint16 math into a int16 to correctly calculate diffs for cursor position.
+        // (Angle values are 0 to UINT16_MAX representing 0 to 360 degrees, so 180 to 360 will overflow
+        //  causing rotation to reverse, but that is correct as the watch will be upside down)
+        int16_t diff_x = angle_x - s_center_x;
   
-  if (has_valid_sample) {
-    // If there was no vibration, calculate average accel values for sample size
-    avg_x = divide(total_x, num_samples);
-    avg_y = divide(total_y, num_samples);
-    avg_z = divide(total_z, num_samples);
-      
-    if (s_centered) {
-      // If cursor center has been fixed, move cursor as necessary
-      
-      // Average values for sample size are still a little
-      // erratic, so use a single pole, IIR filter to smooth them out
-      s_filtered_x = (s_filtered_x * FILTER_K) + ((1.0 - FILTER_K) * avg_x);
-      s_filtered_y = (s_filtered_y * FILTER_K) + ((1.0 - FILTER_K) * avg_y);
-      s_filtered_z = (s_filtered_z * FILTER_K) + ((1.0 - FILTER_K) * avg_z);
-      
-      // Convert filtered accel values to angles in the x and y plane
-      // (Angle values are 0 to 2^16 representing 0 to 360 degrees linearly)
-      uint16_t adj = intsqrt(s_filtered_y * s_filtered_y + s_filtered_z * s_filtered_z);
-      uint16_t angle_x = atan2_lookup(s_filtered_x * ((s_filtered_z > 0) ? -1 : 1), adj);
-      adj = intsqrt(s_filtered_x * s_filtered_x + s_filtered_z * s_filtered_z) * ((s_filtered_z > 0) ? -1 : 1);
-      uint16_t angle_y = atan2_lookup(s_filtered_y, adj);
-      
-      GPoint loc;
-      
-      // Calculate the difference from the center values to represent cursor movement.
-      // Use overflow of uint16 math into a int16 to correctly calculate diffs for cursor position.
-      // (Angle values are 0 to UINT16_MAX representing 0 to 360 degrees, so 180 to 360 will overflow
-      //  causing rotation to reverse, but that is correct as the watch will be upside down)
-      int16_t diff_x = angle_x - s_center_x;
-
-      if (diff_x < -s_max_tilt)
-        loc.x = 0;
-      else if (diff_x > s_max_tilt)
-        loc.x = 144;
-      else
-        loc.x = 72 + divide(diff_x * 72, s_max_tilt);
-      
-      int16_t diff_y = angle_y - s_center_y;
-      
-      if (diff_y < -s_max_tilt)
-        loc.y = 0;
-      else if (diff_y > s_max_tilt)
-        loc.y = 168;
-      else
-        loc.y = 84 + divide(diff_y * 84, s_max_tilt);
-      
-      // Move the cursor on the canvas window (The 'pen down' setting will determine if anything is drawn)
-      cursor_set_loc(loc);
-      
-    } else {
-      // Use this sample average as the center location for calculating change for moving the cursor
-      
-      // Convert accel values to angles in the x and y plane
-      uint16_t adj = intsqrt(avg_y * avg_y + avg_z * avg_z);
-      uint16_t angle_x = atan2_lookup(avg_x * ((avg_z > 0) ? -1 : 1), adj);
-      adj = intsqrt(avg_x * avg_x + avg_z * avg_z) * ((avg_z > 0) ? -1 : 1);
-      uint16_t angle_y = atan2_lookup(avg_y, adj);
-      
-      s_center_x = angle_x;
-      s_center_y = angle_y;
-      s_filtered_x = avg_x;
-      s_filtered_y = avg_y;
-      s_filtered_z = avg_z;
-      s_centered = true;
-      
-      APP_LOG(APP_LOG_LEVEL_DEBUG, "Baselines - x: %d g, x: %d deg, y: %d g, y: %d deg, z %d g", 
-              avg_x, (int)divide(360 * angle_x, UINT16_MAX), avg_y, (int)divide(360 * angle_y, UINT16_MAX), avg_z);
+        if (diff_x < -s_max_tilt)
+          loc.x = 0;
+        else if (diff_x > s_max_tilt)
+          loc.x = IMG_WIDTH;
+        else
+          loc.x = (IMG_WIDTH/2) + divide(diff_x * (IMG_WIDTH/2), s_max_tilt);
+        
+        int16_t diff_y = angle_y - s_center_y;
+        
+        if (diff_y < -s_max_tilt)
+          loc.y = 0;
+        else if (diff_y > s_max_tilt)
+          loc.y = IMG_HEIGHT;
+        else
+          loc.y = (IMG_HEIGHT/2) + divide(diff_y * (IMG_HEIGHT/2), s_max_tilt);
+        
+        // Move the cursor on the canvas window (The 'pen down' setting will determine if anything is drawn)
+        cursor_set_loc(loc);
+        
+      } else {
+        // Use this sample average as the center location for calculating change for moving the cursor
+        
+        // Convert accel values to angles in the x and y plane
+        uint16_t adj = intsqrt(avg_y * avg_y + avg_z * avg_z);
+        uint16_t angle_x = atan2_lookup(avg_x * ((avg_z > 0) ? -1 : 1), adj);
+        adj = intsqrt(avg_x * avg_x + avg_z * avg_z) * ((avg_z > 0) ? -1 : 1);
+        uint16_t angle_y = atan2_lookup(avg_y, adj);
+        
+        s_center_x = angle_x;
+        s_center_y = angle_y;
+        s_filtered_x = avg_x;
+        s_filtered_y = avg_y;
+        s_filtered_z = avg_z;
+        s_centered = true;
+        
+        APP_LOG(APP_LOG_LEVEL_DEBUG, "Baselines - x: %d g, x: %d deg, y: %d g, y: %d deg, z %d g", 
+                avg_x, (int)divide(360 * angle_x, UINT16_MAX), avg_y, (int)divide(360 * angle_y, UINT16_MAX), avg_z);
+      }
     }
   }
-  
 }
 
 // Load settings into the app
@@ -197,8 +164,11 @@ static void load_settings(void) {
   
   if (s_settings.backlight_alwayson && is_pen_down())
     light_enable(true);
-  else
+  else {
+    // Turn permanent light off, but enable 3 second light so it doesn't turn off immediately
     light_enable(false);
+    light_enable_interaction();
+  }
   
   switch (s_settings.sensitivity) {
     case CS_HIGH:
@@ -223,11 +193,6 @@ static void settings_closed(void) {
   persist_write_int(SENSITIVITY_KEY, s_settings.sensitivity);
 }
 
-// Event fires after a certain time to hide the message window
-static void hide_msg_delayed(void *data) {
-  hide_msg();
-}
-
 // Save image pixel data into the watch storage
 static void save_image() {
   set_paused();
@@ -238,17 +203,20 @@ static void save_image() {
     
     if (bytes == NULL) {
       // If there is no image data, make sure it is deleted from the watch storage
-      for (int s = 0; s < 14; s++) {
+      for (int s = 0; s < ((IMG_PIXELS / PERSIST_SIZE_MAX) + 1); s++) {
         if (persist_exists(IMAGEDATA_START_KEY + s))
           persist_delete(IMAGEDATA_START_KEY + s);
       }
     } else {
       // Store the image pixel byte array as chunks in the watch storage
       // (Each entry can only store up to 256 bytes)
-      for (int s = 0; s < 13; s++) {
-        persist_write_data(IMAGEDATA_START_KEY + s, bytes + (s * 256), 256); 
+      for (int s = 0; s < (IMG_PIXELS / PERSIST_SIZE_MAX); s++) {
+        persist_write_data(IMAGEDATA_START_KEY + s, bytes + (s * PERSIST_SIZE_MAX), PERSIST_SIZE_MAX); 
       }
-      persist_write_data(IMAGEDATA_START_KEY + 13, bytes + (13 * 256), 32); 
+      // Store remainder pixels
+      persist_write_data(IMAGEDATA_START_KEY + (IMG_PIXELS / PERSIST_SIZE_MAX), 
+                         bytes + ((IMG_PIXELS / PERSIST_SIZE_MAX) * PERSIST_SIZE_MAX), 
+                         IMG_PIXELS % PERSIST_SIZE_MAX); 
       s_changed = false;
     }
   }
@@ -257,17 +225,22 @@ static void save_image() {
 // Send a chunk of image pixel data to the phone (ignore *data parameter, used as timer procdure)
 // (app message outbox has a limit of just over 512 bytes so the image must be sent in chunks)
 static void send_image_chunk(void *data) {
+  // Get the pixel bytes chunk start position
   void *bytes = get_imagedata() + s_chunk_pos;
   
+  // Assume max chunk size
   int len = IMAGE_CHUNK_SIZE;
   
+  // Indicate if 1st or one of many middle chunk
   int chunk_status_flag = (s_chunk_pos == 0) ? FIRST_CHUNK : MID_CHUNK;
   
-  if (s_chunk_pos + len > 20*168) {
-    len = (20*168) - s_chunk_pos;
+  if (s_chunk_pos + len > IMG_PIXELS) {
+    // If chunk goes past end of pixel array, only send remainder as last chunk
+    len = IMG_PIXELS - s_chunk_pos;
     chunk_status_flag = LAST_CHUNK;
   }
   
+  // Setup tuplets for sending data to phone
   Tuplet data_chunk = TupletBytes(IMAGE_DATA_SEND_KEY, bytes, len);
   Tuplet chunk_status = TupletInteger(CHUNK_STATUS_KEY, chunk_status_flag);
   
@@ -285,52 +258,67 @@ static void send_image_chunk(void *data) {
   dict_write_end(iter);
   
   APP_LOG(APP_LOG_LEVEL_DEBUG, "Sending image chunk - Pos: %d, Len: %d", s_chunk_pos, len);
-  
+  // Finally, send image chunk
   app_message_outbox_send();
 }
 
+// Event fired when send failed
 static void send_image_chunk_failed(DictionaryIterator *iter, AppMessageResult reason, void *context) {
   APP_LOG(APP_LOG_LEVEL_DEBUG, "Send image chunk failed: %d", reason);
   s_sending_image = false;
+  // Show error message for 15 seconds
   snprintf(s_msg, sizeof(s_msg), "Sending failed\n(Error: %d)", reason);
-  show_msg(s_msg, true);
-  app_timer_register(15000, hide_msg_delayed, NULL);
+  show_msg(s_msg, true, 15);
 }
 
+// Event fired when image chunk succesfully sent
 static void sent_image_chunk(DictionaryIterator *iter, void *context) {
-  if (s_sending_image && s_chunk_pos + IMAGE_CHUNK_SIZE < 20*168) {
+  if (s_sending_image && s_chunk_pos + IMAGE_CHUNK_SIZE < IMG_PIXELS) {
+    // If there is more to send, send it
     s_chunk_pos += IMAGE_CHUNK_SIZE;
-    snprintf(s_msg, sizeof(s_msg), "Sending to Phone...\n%d%%", (int)divide(s_chunk_pos * 100, 20*168));
-    show_msg(s_msg, true);
+    snprintf(s_msg, sizeof(s_msg), "Sending to Phone...\n%d%%", (int)divide(s_chunk_pos * 100, IMG_PIXELS));
+    show_msg(s_msg, true, 0);
+    // Send next chunk after brief delay to allow display to update
     app_timer_register(15, send_image_chunk, NULL);
-  }
-  else {
+  } else {
+    // Else sent all chunks, so stop sending and show Sent message for 15 seconds
     s_sending_image = false;
-    strncpy(s_msg, "Sent to Phone.\nGo to Draw app Settings in Pebble phone app to view.", sizeof(s_msg));
-    show_msg(s_msg, false);
-    app_timer_register(15000, hide_msg_delayed, NULL);
+    show_msg("Sent to Phone.\nGo to Draw app Settings in Pebble phone app to view.", false, 15);
   }
 }
 
+// Start sending the image data to the phone
 static void send_image(void) {
-  s_chunk_pos = 0;
-  s_sending_image = true;
-  strncpy(s_msg, "Sending to Phone...\n0%", sizeof(s_msg));
-  show_msg(s_msg, true);
-  app_timer_register(300, send_image_chunk, NULL);
+  if (get_imagedata() == NULL) {
+    // No image data
+    show_msg("No image to send.\nPress Back and then Select button to start drawing", false, 5);
+  } else {
+    // If have image data, start sending
+    s_chunk_pos = 0;
+    s_sending_image = true;
+    show_msg("Sending to Phone...\n0%", true, 0);
+    // Start sending after a brief delay to allow message to display
+    app_timer_register(300, send_image_chunk, NULL);
+  }
 }
 
+// Handle Up button clicks
 static void up_click_handler(ClickRecognizerRef recognizer, void *context) {
+  // Pause drawing and reset center (accel handler will re-center when s_centered == false)
   set_paused();
   s_centered = false;
 }
 
+// Handle Select button clicks
 static void select_click_handler(ClickRecognizerRef recognizer, void *context) {
+  // Mark image as changed and toggle 'pen' on/off
   s_changed = true;
   toggle_pen();
 }
 
+// Handle Down button clicks
 static void down_click_handler(ClickRecognizerRef recognizer, void *context) {
+  // Pause drawing and show settings window
   set_paused();
   show_settings(&s_settings, send_image, settings_closed);
 }
@@ -342,32 +330,45 @@ static void click_config_provider(void *context) {
   window_single_click_subscribe(BUTTON_ID_DOWN, down_click_handler);
 }
 
+// Handle app focus changes
 static void focus_handler(bool in_focus) {
+  // Pause drawing if we lose focus (notification)
   if (!in_focus) set_paused();
+  s_infocus = in_focus;
 }
 
+// Handle 'tap' event when watch is sharply shaken/tapped
 static void tap_handler(AccelAxisType axis, int32_t direction) {
-  if (!is_pen_down() && axis == ACCEL_AXIS_Y && is_canvas_on_top()) {
+  if (!is_pen_down() && axis == ACCEL_AXIS_Y && s_infocus && is_canvas_on_top()) {
+    // If not drawing and tap was in y plane and app is in focus and canvase is showing, clear image
     s_changed = true;
     clear_image();
   }
 }
 
+// Event fired when info window is closed
 static void info_closed(void) {
-  // Re-baseline on closing info window
+  // Re-center cursor on closing info window so it is centered when used is looking at watch
   s_centered = false;
 }
 
+// Event fired when 'pen' status changes
 static void pen_status_changed(bool pen_down) {
   if (s_settings.backlight_alwayson) {
+    // If backlight setting is on, turn on light if 'pen' is down (drawing)
     if (pen_down)
       light_enable(true);
-    else
+    else {
+      // Turn permanent light off, but enable 3 second light so that it doesn't immediately turn off
       light_enable(false);
+      light_enable_interaction();
+    }
   }
 }
 
+// Event fired when canvas window closes
 static void canvas_closed(void) {
+  // Save image data to watch storage
   save_image();
 }
 
@@ -376,6 +377,7 @@ static void init(void) {
   // Show the main screen and update the UI
   show_canvas(pen_status_changed, canvas_closed);
   
+  // Get settings
   if (persist_exists(DRAWINGCURSORON_KEY))
     s_settings.drawingcursor_on = persist_read_bool(DRAWINGCURSORON_KEY);
   else
@@ -393,6 +395,7 @@ static void init(void) {
   
   load_settings();
   
+  // If saved, load image data from storage
   if (persist_exists(IMAGEDATA_START_KEY)) {
     APP_LOG(APP_LOG_LEVEL_DEBUG, "Storage has image data - Initializing image");
     
@@ -401,27 +404,29 @@ static void init(void) {
     
     if (bytes != NULL) {
       APP_LOG(APP_LOG_LEVEL_DEBUG, "Image initialized - reading image data");
-      for (int s = 0; s < 13; s++) {
+      for (int s = 0; s < (IMG_PIXELS / PERSIST_SIZE_MAX); s++) {
         if (persist_exists(IMAGEDATA_START_KEY + s)) {
-          persist_read_data(IMAGEDATA_START_KEY + s, bytes + (s * 256), 256);
+          persist_read_data(IMAGEDATA_START_KEY + s, bytes + (s * PERSIST_SIZE_MAX), PERSIST_SIZE_MAX);
         }
       }
-      if (persist_exists(IMAGEDATA_START_KEY + 13))
-        persist_read_data(IMAGEDATA_START_KEY + 13, bytes + (13 * 256), 32);
+      if (persist_exists(IMAGEDATA_START_KEY + (IMG_PIXELS / PERSIST_SIZE_MAX)))
+        persist_read_data(IMAGEDATA_START_KEY + (IMG_PIXELS / PERSIST_SIZE_MAX), 
+                          bytes + ((IMG_PIXELS / PERSIST_SIZE_MAX) * PERSIST_SIZE_MAX), 
+                          IMG_PIXELS % PERSIST_SIZE_MAX);
     }
   }
   
+  // Subscribe to events
   init_click_events(click_config_provider);
-  
   accel_data_service_subscribe(5, accel_handler);
   accel_service_set_sampling_rate(ACCEL_SAMPLING_50HZ);
-  
   app_focus_service_subscribe(focus_handler);
-  
   accel_tap_service_subscribe(tap_handler);
   
+  // Show info window to explain buttons
   show_infowin(info_closed);
   
+  // Init app message for sending image to phone
   app_message_register_outbox_sent(sent_image_chunk);
   app_message_register_outbox_failed(send_image_chunk_failed);
   app_message_open(64, app_message_outbox_size_maximum());

@@ -1,5 +1,5 @@
 #include <pebble.h>
-
+  
 typedef void (*CanvaseClosedCallBack)();
 typedef void (*PenStatusCallBack)(bool pen_down);
   

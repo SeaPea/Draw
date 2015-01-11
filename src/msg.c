@@ -1,8 +1,11 @@
 #include "msg.h"
 #include <pebble.h>
 
+// Simple message window that can be set not to close on the back button (modal = true)
+  
 static bool s_modal = false;
 static char s_msg[100];
+static AppTimer *s_autohide = NULL;
   
 // BEGIN AUTO-GENERATED UI CODE; DO NOT MODIFY
 static Window *s_window;
@@ -44,7 +47,13 @@ static void init_click_events(ClickConfigProvider click_config_provider) {
   window_set_click_config_provider(s_window, click_config_provider);
 }
 
-void show_msg(char *msg, bool modal) {
+static void auto_hide(void *data) {
+  s_autohide = NULL;
+  hide_msg();
+}
+
+// Show or update window with the given message, modality, and seconds to hide the message after (0 means no auto-hide)
+void show_msg(char *msg, bool modal, int hide_after) {
   s_modal = modal;
   
   if (s_window == NULL || !window_stack_contains_window(s_window)) {
@@ -58,6 +67,16 @@ void show_msg(char *msg, bool modal) {
   
   strncpy(s_msg, msg, sizeof(s_msg));
   text_layer_set_text(msg_layer, s_msg);
+  
+  // Set auto-hide timer
+  if (hide_after == 0) {
+    if (s_autohide != NULL) app_timer_cancel(s_autohide);
+  } else {
+    if (s_autohide != NULL)
+      app_timer_reschedule(s_autohide, hide_after * 1000);
+    else
+      app_timer_register(hide_after * 1000, auto_hide, NULL);
+  }
 }
 
 void hide_msg(void) {
