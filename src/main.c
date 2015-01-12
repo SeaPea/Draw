@@ -51,6 +51,7 @@ static int s_filtered_z;
 static int s_max_tilt;
 static bool s_changed = false; // Indicates if the image has changed
 static bool s_infocus = true;  // Indicates if the app is in focus
+static bool s_perm_light_on = false;
 
 static bool s_sending_image = false;
 static int s_chunk_pos;
@@ -158,17 +159,24 @@ static void accel_handler(AccelData *data, uint32_t num_samples) {
   }
 }
 
+static void light_delay(void *data) {
+  light_enable_interaction();
+}
+
+static void light_control(bool light_on) {
+  if (light_on != s_perm_light_on) {
+    light_enable(light_on);
+    s_perm_light_on = light_on;
+    // If turning permanent light off, enable 3 second light after short delay so it doesn't turn off immediately
+    if (!light_on) app_timer_register(5, light_delay, NULL);
+  }
+}
+
 // Load settings into the app
 static void load_settings(void) {
   set_drawingcursor(s_settings.drawingcursor_on);
   
-  if (s_settings.backlight_alwayson && is_pen_down())
-    light_enable(true);
-  else {
-    // Turn permanent light off, but enable 3 second light so it doesn't turn off immediately
-    light_enable(false);
-    light_enable_interaction();
-  }
+  light_control(s_settings.backlight_alwayson && is_pen_down());
   
   switch (s_settings.sensitivity) {
     case CS_HIGH:
@@ -354,16 +362,7 @@ static void info_closed(void) {
 
 // Event fired when 'pen' status changes
 static void pen_status_changed(bool pen_down) {
-  if (s_settings.backlight_alwayson) {
-    // If backlight setting is on, turn on light if 'pen' is down (drawing)
-    if (pen_down)
-      light_enable(true);
-    else {
-      // Turn permanent light off, but enable 3 second light so that it doesn't immediately turn off
-      light_enable(false);
-      light_enable_interaction();
-    }
-  }
+  light_control(s_settings.backlight_alwayson && pen_down);
 }
 
 // Event fired when canvas window closes
