@@ -12,10 +12,11 @@ static TextLayer *s_textlayer_2;
 static TextLayer *s_textlayer_3;
 static TextLayer *s_textlayer_4;
 static TextLayer *s_textlayer_5;
-static TextLayer *s_textlayer_6;
 static TextLayer *s_textlayer_7;
 static TextLayer *s_textlayer_8;
 static TextLayer *s_textlayer_9;
+static TextLayer *s_textlayer_10;
+static TextLayer *s_textlayer_6;
 
 static void initialise_ui(void) {
   s_window = window_create();
@@ -54,13 +55,6 @@ static void initialise_ui(void) {
   text_layer_set_text_alignment(s_textlayer_5, GTextAlignmentRight);
   layer_add_child(window_get_root_layer(s_window), (Layer *)s_textlayer_5);
   
-  // s_textlayer_6
-  s_textlayer_6 = text_layer_create(GRect(58, 65, 70, 36));
-  text_layer_set_background_color(s_textlayer_6, GColorClear);
-  text_layer_set_text(s_textlayer_6, "Toggle pen on/off");
-  text_layer_set_text_alignment(s_textlayer_6, GTextAlignmentRight);
-  layer_add_child(window_get_root_layer(s_window), (Layer *)s_textlayer_6);
-  
   // s_textlayer_7
   s_textlayer_7 = text_layer_create(GRect(126, 139, 18, 20));
   text_layer_set_background_color(s_textlayer_7, GColorClear);
@@ -69,17 +63,31 @@ static void initialise_ui(void) {
   layer_add_child(window_get_root_layer(s_window), (Layer *)s_textlayer_7);
   
   // s_textlayer_8
-  s_textlayer_8 = text_layer_create(GRect(71, 139, 58, 17));
+  s_textlayer_8 = text_layer_create(GRect(13, 139, 116, 17));
   text_layer_set_background_color(s_textlayer_8, GColorClear);
-  text_layer_set_text(s_textlayer_8, "Settings");
+  text_layer_set_text(s_textlayer_8, "Actions & Settings");
   text_layer_set_text_alignment(s_textlayer_8, GTextAlignmentRight);
   layer_add_child(window_get_root_layer(s_window), (Layer *)s_textlayer_8);
   
   // s_textlayer_9
-  s_textlayer_9 = text_layer_create(GRect(2, 102, 140, 30));
+  s_textlayer_9 = text_layer_create(GRect(2, 105, 140, 30));
   text_layer_set_background_color(s_textlayer_9, GColorClear);
-  text_layer_set_text(s_textlayer_9, "Shake Pebble while pen is off to clear drawing");
+  text_layer_set_text(s_textlayer_9, "Shake Pebble while pen is off to undo/clear");
   layer_add_child(window_get_root_layer(s_window), (Layer *)s_textlayer_9);
+  
+  // s_textlayer_10
+  s_textlayer_10 = text_layer_create(GRect(51, 76, 78, 30));
+  text_layer_set_background_color(s_textlayer_10, GColorClear);
+  text_layer_set_text(s_textlayer_10, "Hold: Toggle eraser");
+  text_layer_set_text_alignment(s_textlayer_10, GTextAlignmentRight);
+  layer_add_child(window_get_root_layer(s_window), (Layer *)s_textlayer_10);
+  
+  // s_textlayer_6
+  s_textlayer_6 = text_layer_create(GRect(46, 49, 82, 32));
+  text_layer_set_background_color(s_textlayer_6, GColorClear);
+  text_layer_set_text(s_textlayer_6, "Click: Toggle pen");
+  text_layer_set_text_alignment(s_textlayer_6, GTextAlignmentRight);
+  layer_add_child(window_get_root_layer(s_window), (Layer *)s_textlayer_6);
 }
 
 static void destroy_ui(void) {
@@ -89,10 +97,11 @@ static void destroy_ui(void) {
   text_layer_destroy(s_textlayer_3);
   text_layer_destroy(s_textlayer_4);
   text_layer_destroy(s_textlayer_5);
-  text_layer_destroy(s_textlayer_6);
   text_layer_destroy(s_textlayer_7);
   text_layer_destroy(s_textlayer_8);
   text_layer_destroy(s_textlayer_9);
+  text_layer_destroy(s_textlayer_10);
+  text_layer_destroy(s_textlayer_6);
 }
 // END AUTO-GENERATED UI CODE
 

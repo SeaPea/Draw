@@ -1,10 +1,15 @@
 #include <pebble.h>
   
 typedef void (*CanvaseClosedCallBack)();
-typedef void (*PenStatusCallBack)(bool pen_down);
+typedef void (*PenStatusCallBack)(bool pen_down, bool erasor_on);
   
 void set_drawingcursor(bool cursor_on);
+void set_eraserwidth(int width);
+void set_undo_undo(bool undo_undo);
+bool has_undo(void);
+void undo_image(void);
 void toggle_pen(void);
+void toggle_eraser(void);
 bool is_pen_down(void);
 void set_paused(void);
 void cursor_set_loc(GPoint loc);

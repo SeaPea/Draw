@@ -4,18 +4,25 @@
 
 // Application settings window, using a simple menu layer
 
+#define MIN_ERASER_WIDTH 1
+#define MAX_ERASER_WIDTH 15
+  
 #define NUM_MENU_SECTIONS 2
-#define NUM_MENU_SEND_ITEMS 1
-#define NUM_MENU_MISC_ITEMS 3
-#define MENU_SEND_SECTION 0
+#define NUM_MENU_ACTION_ITEMS 2
+#define NUM_MENU_MISC_ITEMS 5
+#define MENU_ACTION_SECTION 0
 #define MENU_SEND_ITEM 0
+#define MENU_CLEAR_ITEM 1
 #define MENU_MISC_SECTION 1
 #define MENU_DRAWINGCURSOR_ITEM 0
 #define MENU_BACKLIGHT_ITEM 1
 #define MENU_SENSITIVTY_ITEM 2
+#define MENU_ERASERWIDTH_ITEM 3
+#define MENU_SECONDSHAKE_ITEM 4
   
 static struct Settings_st *s_settings; // Settings struct passed from main unit
 static SendToPhoneCallBack s_send_event;
+static ClearImageCallBack s_clear_event;
 static SettingsClosedCallBack s_settings_closed;
 
 static Window *s_window;
@@ -46,8 +53,8 @@ static uint16_t menu_get_num_sections_callback(MenuLayer *menu_layer, void *data
 // Set menu section item counts
 static uint16_t menu_get_num_rows_callback(MenuLayer *menu_layer, uint16_t section_index, void *data) {
   switch (section_index) {
-    case MENU_SEND_SECTION:
-      return NUM_MENU_SEND_ITEMS;
+    case MENU_ACTION_SECTION:
+      return NUM_MENU_ACTION_ITEMS;
     case MENU_MISC_SECTION:
       return NUM_MENU_MISC_ITEMS;
     default:
@@ -58,8 +65,8 @@ static uint16_t menu_get_num_rows_callback(MenuLayer *menu_layer, uint16_t secti
 // Set default menu item height
 static int16_t menu_get_header_height_callback(MenuLayer *menu_layer, uint16_t section_index, void *data) {
   switch (section_index) {
-    case MENU_SEND_SECTION:
-      return 0;
+    case MENU_ACTION_SECTION:
+      return MENU_CELL_BASIC_HEADER_HEIGHT;
     case MENU_MISC_SECTION:
       return MENU_CELL_BASIC_HEADER_HEIGHT;
     default:
@@ -70,8 +77,8 @@ static int16_t menu_get_header_height_callback(MenuLayer *menu_layer, uint16_t s
 // Draw menu section headers
 static void menu_draw_header_callback(GContext* ctx, const Layer *cell_layer, uint16_t section_index, void *data) {
   switch (section_index) {
-    case MENU_SEND_SECTION:
-      menu_cell_basic_header_draw(ctx, cell_layer, NULL);
+    case MENU_ACTION_SECTION:
+      menu_cell_basic_header_draw(ctx, cell_layer, "Actions");
       break;
     case MENU_MISC_SECTION:
       menu_cell_basic_header_draw(ctx, cell_layer, "Misc Settings");
@@ -82,12 +89,18 @@ static void menu_draw_header_callback(GContext* ctx, const Layer *cell_layer, ui
 // Draw menu items
 static void menu_draw_row_callback(GContext* ctx, const Layer *cell_layer, MenuIndex *cell_index, void *data) {
   
+  char eraser_width_str[10];
+  
   switch (cell_index->section) {
-    case MENU_SEND_SECTION:
+    case MENU_ACTION_SECTION:
       switch (cell_index->row) {
         case MENU_SEND_ITEM:
           // Option for sending image to phone
           menu_cell_basic_draw(ctx, cell_layer, "Send to Phone", NULL, NULL);
+          break;
+        case MENU_CLEAR_ITEM:
+          // Option for clearing image
+          menu_cell_basic_draw(ctx, cell_layer, "Clear Image", NULL, NULL);
           break;
       }
       break;
@@ -119,6 +132,22 @@ static void menu_draw_row_callback(GContext* ctx, const Layer *cell_layer, MenuI
               break;
           }
           break;
+        case MENU_ERASERWIDTH_ITEM:
+          if (s_settings->eraser_width == 1)
+            strncpy(eraser_width_str, "1 Pixel", sizeof(eraser_width_str));
+          else
+            snprintf(eraser_width_str, sizeof(eraser_width_str), "%d Pixels", s_settings->eraser_width);
+        
+          menu_cell_basic_draw(ctx, cell_layer, "Eraser Width", eraser_width_str, NULL);
+          
+          break;
+        case MENU_SECONDSHAKE_ITEM:
+          if (s_settings->secondshake_clear)
+            menu_cell_basic_draw(ctx, cell_layer, "Second Shake", "Clears image", NULL);
+          else
+            menu_cell_basic_draw(ctx, cell_layer, "Second Shake", "Undo the last undo", NULL);
+        
+          break;
       }
       break;
   }
@@ -127,11 +156,17 @@ static void menu_draw_row_callback(GContext* ctx, const Layer *cell_layer, MenuI
 // Process menu item select clicks
 static void menu_select_callback(MenuLayer *menu_layer, MenuIndex *cell_index, void *data) {
   switch (cell_index->section) {
-    case MENU_SEND_SECTION:
+    case MENU_ACTION_SECTION:
       switch (cell_index->row) {
         case MENU_SEND_ITEM:
           // Call event in main unit to send image to phone
           if (s_send_event != NULL) s_send_event();
+          hide_settings();
+          break;
+        case MENU_CLEAR_ITEM:
+          // Call event in main unit to clear image
+          if (s_clear_event != NULL) s_clear_event();
+          hide_settings();
           break;
       }
     
@@ -140,18 +175,24 @@ static void menu_select_callback(MenuLayer *menu_layer, MenuIndex *cell_index, v
         case MENU_DRAWINGCURSOR_ITEM:
           // Toggle cursor while drawing on/off
           s_settings->drawingcursor_on = !s_settings->drawingcursor_on;
-          layer_mark_dirty(menu_layer_get_layer(settings_layer));
           break;
         case MENU_BACKLIGHT_ITEM:
           // Toggle backlight while drawing on/off
           s_settings->backlight_alwayson = !s_settings->backlight_alwayson;
-          layer_mark_dirty(menu_layer_get_layer(settings_layer));
         case MENU_SENSITIVTY_ITEM:
           // Cycle through tilt sensitivity settings
           s_settings->sensitivity = (s_settings->sensitivity == CS_HIGH ? CS_LOW : s_settings->sensitivity + 1);
-          layer_mark_dirty(menu_layer_get_layer(settings_layer));
           break;
+        case MENU_ERASERWIDTH_ITEM:
+          if (s_settings->eraser_width >= MAX_ERASER_WIDTH)
+            s_settings->eraser_width = MIN_ERASER_WIDTH;
+          else
+            s_settings->eraser_width += 2;
+          break;
+        case MENU_SECONDSHAKE_ITEM:
+          s_settings->secondshake_clear = !s_settings->secondshake_clear;
       }
+      layer_mark_dirty(menu_layer_get_layer(settings_layer));
       break;
   }
 
@@ -162,7 +203,7 @@ static void handle_window_unload(Window* window) {
 }
 
 // Show settings window with settings passed as reference to structure and with callback procedures
-void show_settings(struct Settings_st *settings, SendToPhoneCallBack send_event, SettingsClosedCallBack settings_closed) {
+void show_settings(struct Settings_st *settings, SendToPhoneCallBack send_event, ClearImageCallBack clear_event, SettingsClosedCallBack settings_closed) {
   initialise_ui();
   window_set_window_handlers(s_window, (WindowHandlers) {
     .unload = handle_window_unload,
@@ -170,6 +211,7 @@ void show_settings(struct Settings_st *settings, SendToPhoneCallBack send_event,
   
   s_settings = settings;
   s_send_event = send_event;
+  s_clear_event = clear_event;
   s_settings_closed = settings_closed;
   
   // Set all the callbacks for the menu layer

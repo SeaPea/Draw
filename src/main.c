@@ -22,6 +22,8 @@ enum SettingKeys {
   DRAWINGCURSORON_KEY = 0,
   BACKLIGHTAWAYSON_KEY = 1,
   SENSITIVITY_KEY = 3,
+  SECONDSHAKE_CLEAR_KEY = 4,
+  ERASERSIZE_KEY = 5,
   IMAGEDATA_START_KEY = 20
 };
 
@@ -189,6 +191,10 @@ static void load_settings(void) {
       s_max_tilt = MEDIUM_TILT;
       break;
   }
+  
+  set_eraserwidth(s_settings.eraser_width);
+  
+  set_undo_undo(!s_settings.secondshake_clear);
 }
 
 // Event fires when settings window is closed
@@ -199,6 +205,8 @@ static void settings_closed(void) {
   persist_write_bool(DRAWINGCURSORON_KEY, s_settings.drawingcursor_on);
   persist_write_bool(BACKLIGHTAWAYSON_KEY, s_settings.backlight_alwayson);
   persist_write_int(SENSITIVITY_KEY, s_settings.sensitivity);
+  persist_write_int(ERASERSIZE_KEY, s_settings.eraser_width);
+  persist_write_bool(SECONDSHAKE_CLEAR_KEY, s_settings.secondshake_clear);
 }
 
 // Save image pixel data into the watch storage
@@ -324,17 +332,25 @@ static void select_click_handler(ClickRecognizerRef recognizer, void *context) {
   toggle_pen();
 }
 
+// Handle holding Select button
+static void select_hold_handler(ClickRecognizerRef recognizer, void *context) {
+  // Mark image as changed and toggle 'eraser' on/off
+  s_changed = true;
+  toggle_eraser();
+}
+
 // Handle Down button clicks
 static void down_click_handler(ClickRecognizerRef recognizer, void *context) {
   // Pause drawing and show settings window
   set_paused();
-  show_settings(&s_settings, send_image, settings_closed);
+  show_settings(&s_settings, send_image, clear_image, settings_closed);
 }
   
 // Trap single clicks
 static void click_config_provider(void *context) {
   window_single_click_subscribe(BUTTON_ID_UP, up_click_handler);
   window_single_click_subscribe(BUTTON_ID_SELECT, select_click_handler);
+  window_long_click_subscribe(BUTTON_ID_SELECT, 2000, select_hold_handler, NULL);
   window_single_click_subscribe(BUTTON_ID_DOWN, down_click_handler);
 }
 
@@ -350,7 +366,10 @@ static void tap_handler(AccelAxisType axis, int32_t direction) {
   if (!is_pen_down() && axis == ACCEL_AXIS_Y && s_infocus && is_canvas_on_top()) {
     // If not drawing and tap was in y plane and app is in focus and canvase is showing, clear image
     s_changed = true;
-    clear_image();
+    if (has_undo())
+      undo_image();
+    else if (s_settings.secondshake_clear)
+      clear_image();
   }
 }
 
@@ -361,8 +380,8 @@ static void info_closed(void) {
 }
 
 // Event fired when 'pen' status changes
-static void pen_status_changed(bool pen_down) {
-  light_control(s_settings.backlight_alwayson && pen_down);
+static void pen_status_changed(bool pen_down, bool eraser_on) {
+  light_control(s_settings.backlight_alwayson && (pen_down || eraser_on));
 }
 
 // Event fired when canvas window closes
@@ -391,6 +410,16 @@ static void init(void) {
     s_settings.sensitivity = persist_read_int(SENSITIVITY_KEY);
   else
     s_settings.sensitivity = CS_MEDIUM;
+  
+  if (persist_exists(SECONDSHAKE_CLEAR_KEY))
+    s_settings.secondshake_clear = persist_read_bool(SECONDSHAKE_CLEAR_KEY);
+  else
+    s_settings.secondshake_clear = true;
+  
+  if (persist_exists(ERASERSIZE_KEY))
+    s_settings.eraser_width = persist_read_int(ERASERSIZE_KEY);
+  else
+    s_settings.eraser_width = 3;
   
   load_settings();
   
