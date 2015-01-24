@@ -217,13 +217,13 @@ static void save_image() {
     // Save image data
     void *bytes = get_imagedata();
     
-    if (bytes == NULL) {
-      // If there is no image data, make sure it is deleted from the watch storage
-      for (int s = 0; s < ((IMG_PIXELS / PERSIST_SIZE_MAX) + 1); s++) {
-        if (persist_exists(IMAGEDATA_START_KEY + s))
-          persist_delete(IMAGEDATA_START_KEY + s);
-      }
-    } else {
+    // For whatever reason it is faster to always delete and then write the image data
+    for (int s = 0; s < ((IMG_PIXELS / PERSIST_SIZE_MAX) + 1); s++) {
+      if (persist_exists(IMAGEDATA_START_KEY + s))
+        persist_delete(IMAGEDATA_START_KEY + s);
+    }
+    
+    if (bytes != NULL) {
       // Store the image pixel byte array as chunks in the watch storage
       // (Each entry can only store up to 256 bytes)
       for (int s = 0; s < (IMG_PIXELS / PERSIST_SIZE_MAX); s++) {

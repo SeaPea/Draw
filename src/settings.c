@@ -179,6 +179,7 @@ static void menu_select_callback(MenuLayer *menu_layer, MenuIndex *cell_index, v
         case MENU_BACKLIGHT_ITEM:
           // Toggle backlight while drawing on/off
           s_settings->backlight_alwayson = !s_settings->backlight_alwayson;
+          break;
         case MENU_SENSITIVTY_ITEM:
           // Cycle through tilt sensitivity settings
           s_settings->sensitivity = (s_settings->sensitivity == CS_HIGH ? CS_LOW : s_settings->sensitivity + 1);
