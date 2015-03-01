@@ -2,7 +2,7 @@
 #include <pebble.h>
 
   
-//#define DEBUG
+#define DEBUG
 #ifndef DEBUG
 #undef APP_LOG
 #define APP_LOG(...)

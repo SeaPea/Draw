@@ -4,21 +4,25 @@
 
 // Application settings window, using a simple menu layer
 
+#define MIN_PEN_WIDTH 1
+#define MAX_PEN_WIDTH 9
+  
 #define MIN_ERASER_WIDTH 1
 #define MAX_ERASER_WIDTH 15
   
 #define NUM_MENU_SECTIONS 2
 #define NUM_MENU_ACTION_ITEMS 2
-#define NUM_MENU_MISC_ITEMS 5
+#define NUM_MENU_MISC_ITEMS 6
 #define MENU_ACTION_SECTION 0
 #define MENU_SEND_ITEM 0
 #define MENU_CLEAR_ITEM 1
 #define MENU_MISC_SECTION 1
-#define MENU_DRAWINGCURSOR_ITEM 0
-#define MENU_BACKLIGHT_ITEM 1
-#define MENU_SENSITIVTY_ITEM 2
-#define MENU_ERASERWIDTH_ITEM 3
-#define MENU_SECONDSHAKE_ITEM 4
+#define MENU_PENWIDTH_ITEM 0
+#define MENU_DRAWINGCURSOR_ITEM 1
+#define MENU_BACKLIGHT_ITEM 2
+#define MENU_SENSITIVTY_ITEM 3
+#define MENU_ERASERWIDTH_ITEM 4
+#define MENU_SECONDSHAKE_ITEM 5
   
 static struct Settings_st *s_settings; // Settings struct passed from main unit
 static SendToPhoneCallBack s_send_event;
@@ -89,6 +93,7 @@ static void menu_draw_header_callback(GContext* ctx, const Layer *cell_layer, ui
 // Draw menu items
 static void menu_draw_row_callback(GContext* ctx, const Layer *cell_layer, MenuIndex *cell_index, void *data) {
   
+  char pen_width_str[10];
   char eraser_width_str[10];
   
   switch (cell_index->section) {
@@ -107,6 +112,16 @@ static void menu_draw_row_callback(GContext* ctx, const Layer *cell_layer, MenuI
     
     case MENU_MISC_SECTION:
       switch (cell_index->row) {
+        case MENU_PENWIDTH_ITEM:
+          // Show pen width
+          if (s_settings->pen_width == 1)
+            strncpy(pen_width_str, "1 Pixel", sizeof(pen_width_str));
+          else
+            snprintf(pen_width_str, sizeof(pen_width_str), "%d Pixels", s_settings->pen_width);
+        
+          menu_cell_basic_draw(ctx, cell_layer, "Pen Width", pen_width_str, NULL);
+          
+          break;
         case MENU_DRAWINGCURSOR_ITEM:
           // Enable/Disable cursor while drawing
           menu_cell_basic_draw(ctx, cell_layer, "Drawing Cursor", s_settings->drawingcursor_on ? "ON" : "OFF", NULL);
@@ -169,9 +184,16 @@ static void menu_select_callback(MenuLayer *menu_layer, MenuIndex *cell_index, v
           hide_settings();
           break;
       }
-    
+      break;
     case MENU_MISC_SECTION:
       switch (cell_index->row) {
+        case MENU_PENWIDTH_ITEM:
+          // Cycle through pen widths in 2 pixel increments (odd pixel widths used to center point)
+          if (s_settings->pen_width >= MAX_PEN_WIDTH)
+            s_settings->pen_width = MIN_PEN_WIDTH;
+          else
+            s_settings->pen_width += 2;
+          break;
         case MENU_DRAWINGCURSOR_ITEM:
           // Toggle cursor while drawing on/off
           s_settings->drawingcursor_on = !s_settings->drawingcursor_on;
@@ -185,6 +207,7 @@ static void menu_select_callback(MenuLayer *menu_layer, MenuIndex *cell_index, v
           s_settings->sensitivity = (s_settings->sensitivity == CS_HIGH ? CS_LOW : s_settings->sensitivity + 1);
           break;
         case MENU_ERASERWIDTH_ITEM:
+          // Cycle through eraser widths
           if (s_settings->eraser_width >= MAX_ERASER_WIDTH)
             s_settings->eraser_width = MIN_ERASER_WIDTH;
           else
@@ -192,6 +215,7 @@ static void menu_select_callback(MenuLayer *menu_layer, MenuIndex *cell_index, v
           break;
         case MENU_SECONDSHAKE_ITEM:
           s_settings->secondshake_clear = !s_settings->secondshake_clear;
+          break;
       }
       layer_mark_dirty(menu_layer_get_layer(settings_layer));
       break;

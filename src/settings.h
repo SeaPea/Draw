@@ -17,6 +17,7 @@ struct Settings_st {
   CursorSensitivity sensitivity;
   bool secondshake_clear;
   int eraser_width;
+  int pen_width;
 };
 
 void show_settings(struct Settings_st *settings, SendToPhoneCallBack send_event, ClearImageCallBack clear_event, SettingsClosedCallBack settings_closed);

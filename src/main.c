@@ -24,6 +24,7 @@ enum SettingKeys {
   SENSITIVITY_KEY = 3,
   SECONDSHAKE_CLEAR_KEY = 4,
   ERASERSIZE_KEY = 5,
+  PENWIDTH_KEY = 6,
   IMAGEDATA_START_KEY = 20
 };
 
@@ -192,6 +193,8 @@ static void load_settings(void) {
       break;
   }
   
+  set_penwith(s_settings.pen_width);
+  
   set_eraserwidth(s_settings.eraser_width);
   
   set_undo_undo(!s_settings.secondshake_clear);
@@ -206,6 +209,7 @@ static void settings_closed(void) {
   persist_write_bool(BACKLIGHTAWAYSON_KEY, s_settings.backlight_alwayson);
   persist_write_int(SENSITIVITY_KEY, s_settings.sensitivity);
   persist_write_int(ERASERSIZE_KEY, s_settings.eraser_width);
+  persist_write_int(PENWIDTH_KEY, s_settings.pen_width);
   persist_write_bool(SECONDSHAKE_CLEAR_KEY, s_settings.secondshake_clear);
 }
 
@@ -420,6 +424,11 @@ static void init(void) {
     s_settings.eraser_width = persist_read_int(ERASERSIZE_KEY);
   else
     s_settings.eraser_width = 3;
+  
+  if (persist_exists(PENWIDTH_KEY))
+    s_settings.pen_width = persist_read_int(PENWIDTH_KEY);
+  else
+    s_settings.pen_width = 1;
   
   load_settings();
   

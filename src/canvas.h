@@ -4,6 +4,7 @@ typedef void (*CanvaseClosedCallBack)();
 typedef void (*PenStatusCallBack)(bool pen_down, bool erasor_on);
   
 void set_drawingcursor(bool cursor_on);
+void set_penwith(int width);
 void set_eraserwidth(int width);
 void set_undo_undo(bool undo_undo);
 bool has_undo(void);

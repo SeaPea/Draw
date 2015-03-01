@@ -1,5 +1,6 @@
 #include "canvas.h"
 #include "common.h"
+#include "intmath.h"
 
 // Canvas is main window of the application that draws the image
   
@@ -10,6 +11,7 @@ static PenStatusCallBack s_pen_event;
 static CanvaseClosedCallBack s_canvas_closed;
 
 static bool s_drawingcursor_on = true;
+static int8_t s_pen_width = 1;
 static int s_eraser_width = 3;
 static bool s_undo_undo = false;
 static bool s_pen_down = false;
@@ -49,6 +51,48 @@ static void handle_window_unload(Window* window) {
   }
 }
 
+// Draw line with width
+// (Based on code found here http://rosettacode.org/wiki/Bitmap/Bresenham's_line_algorithm#C)
+static void graphics_draw_line2(GContext *ctx, GPoint p0, GPoint p1, int8_t width) {
+  // Order points so that lower x is first
+  int16_t x0, x1, y0, y1;
+  if (p0.x <= p1.x) {
+    x0 = p0.x; x1 = p1.x; y0 = p0.y; y1 = p1.y;
+  } else {
+    x0 = p1.x; x1 = p0.x; y0 = p1.y; y1 = p0.y;
+  }
+  
+  // Init loop variables
+  int16_t dx = x1-x0;
+  int16_t dy = abs(y1-y0);
+  int16_t sy = y0<y1 ? 1 : -1; 
+  int16_t err = (dx>dy ? dx : -dy)/2;
+  int16_t e2;
+  
+  // Calculate whether line thickness will be added vertically or horizontally based on line angle
+  int8_t xdiff, ydiff;
+  
+  if (dx > dy) {
+    xdiff = 0;
+    ydiff = width/2;
+  } else {
+    xdiff = width/2;
+    ydiff = 0;
+  }
+  
+  // Use Bresenham's integer algorithm, with slight modification for line width, to draw line at any angle
+  while (true) {
+    // Draw line thickness at each point by drawing another line 
+    // (horizontally when > +/-45 degrees, vertically when <= +/-45 degrees)
+    graphics_draw_line(ctx, GPoint(x0-xdiff, y0-ydiff), GPoint(x0+xdiff, y0+ydiff));
+    
+    if (x0==x1 && y0==y1) break;
+    e2 = err;
+    if (e2 >-dx) { err -= dy; x0++; }
+    if (e2 < dy) { err += dx; y0 += sy; }
+  }
+}
+
 // Handle canvas layer being redrawn (which also does the image drawing)
 static void updatecanvas(Layer *layer, GContext *ctx) {
   
@@ -67,17 +111,31 @@ static void updatecanvas(Layer *layer, GContext *ctx) {
   
   if (s_pen_down || s_eraser_on) {
     if (s_pen_down) {
-      // Draw a line between the last cursor position and the new position (in case the cursor jumps)
-      // (Could write my own line draw directly to the framebuffer, but why reinvent the wheel?)
+      // Pen is down, so use graphics routines to draw to the framebuffer (which will then be copied to save image)
       graphics_context_set_stroke_color(ctx, GColorBlack);
-      graphics_draw_line(ctx, s_last_loc, s_cursor_loc);
+      if (s_pen_width == 1) {
+        if (abs(s_cursor_loc.x-s_last_loc.x) > 1 || abs(s_cursor_loc.y-s_last_loc.y) > 1)
+          // Draw line between last and current cursor position if it jumps more than 1 pixel
+          graphics_draw_line(ctx, s_last_loc, s_cursor_loc);
+        else
+          graphics_draw_pixel(ctx, s_cursor_loc);
+      } else {
+        graphics_context_set_fill_color(ctx, GColorBlack);
+          
+        if (abs(s_cursor_loc.x-s_last_loc.x) > 1 || abs(s_cursor_loc.y-s_last_loc.y) > 1)
+          // Draw line (with thickness) between last and current cursor position if it jumps more than 1 pixel
+          graphics_draw_line2(ctx, s_last_loc, s_cursor_loc, s_pen_width);
+
+        // Round end of line/current cursor point
+        graphics_fill_circle(ctx, s_cursor_loc, s_pen_width/2);
+      }
     } else if (s_eraser_on) {
-      // Draw a 3x3 white square to 'erase' the current location
+      // Draw a WxW white square to 'erase' the current location
       graphics_context_set_fill_color(ctx, GColorWhite);
       graphics_fill_rect(ctx, GRect(s_cursor_loc.x-(s_eraser_width/2), s_cursor_loc.y-(s_eraser_width/2), s_eraser_width, s_eraser_width), 0, GCornerNone);
     }
     
-    // Create bitmap to store framebuffer pixel data after drawing line (lazy way to draw)
+    // Create bitmap to store framebuffer pixel data after drawing line
     init_imagedata();
     
     if (s_image != NULL) {
@@ -112,6 +170,10 @@ static void updatecanvas(Layer *layer, GContext *ctx) {
 void set_drawingcursor(bool cursor_on) {
   s_drawingcursor_on = cursor_on;
   layer_mark_dirty(s_canvaslayer);
+}
+
+void set_penwith(int width) {
+  s_pen_width = width;
 }
 
 void set_eraserwidth(int width) {
